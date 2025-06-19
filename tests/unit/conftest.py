@@ -2,7 +2,7 @@ import io
 import re
 import shutil
 from pathlib import Path
-from collections.abc import AsyncGenerator, Sequence, Generator
+from collections.abc import AsyncGenerator, Generator, Sequence
 from unittest.mock import create_autospec
 
 import pytest

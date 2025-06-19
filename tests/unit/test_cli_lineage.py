@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
+from databricks.sdk import WorkspaceClient
 
 from databricks.labs.lakebridge import cli
 
 
 @pytest.fixture
 def temp_dirs_for_lineage(empty_input_source: Path, output_folder: Path) -> tuple[Path, Path]:
-
     sample_sql_file = empty_input_source / "sample.sql"
     sample_sql_content = """
     create table table1 select * from table2 inner join
@@ -25,7 +25,9 @@ def temp_dirs_for_lineage(empty_input_source: Path, output_folder: Path) -> tupl
     return empty_input_source, output_folder
 
 
-def test_generate_lineage_valid_input(mock_workspace_client, temp_dirs_for_lineage: tuple[Path, Path]) -> None:
+def test_generate_lineage_valid_input(
+    mock_workspace_client: WorkspaceClient, temp_dirs_for_lineage: tuple[Path, Path]
+) -> None:
     input_dir, output_dir = temp_dirs_for_lineage
     cli.generate_lineage(
         mock_workspace_client,
@@ -54,7 +56,9 @@ def test_generate_lineage_valid_input(mock_workspace_client, temp_dirs_for_linea
 
 
 def test_generate_lineage_with_invalid_dialect(
-    mock_workspace_client, empty_input_source: Path, output_folder: Path
+    mock_workspace_client: WorkspaceClient,
+    empty_input_source: Path,
+    output_folder: Path,
 ) -> None:
     output_folder.mkdir()
     expected_error = (
@@ -69,7 +73,7 @@ def test_generate_lineage_with_invalid_dialect(
         )
 
 
-def test_generate_lineage_invalid_input_source(mock_workspace_client, output_folder: Path) -> None:
+def test_generate_lineage_invalid_input_source(mock_workspace_client: WorkspaceClient, output_folder: Path) -> None:
     output_folder.mkdir()
     expected_error = "Invalid path for '--input-source': Path '/path/to/invalid/sql/file.sql' does not exist."
     with pytest.raises(ValueError, match=re.escape(expected_error)):
@@ -81,7 +85,7 @@ def test_generate_lineage_invalid_input_source(mock_workspace_client, output_fol
         )
 
 
-def test_generate_lineage_invalid_output_dir(mock_workspace_client, empty_input_source: Path) -> None:
+def test_generate_lineage_invalid_output_dir(mock_workspace_client: WorkspaceClient, empty_input_source: Path) -> None:
     expected_error = "Invalid path for '--output-folder': Path '/does/not/exist' does not exist."
     with pytest.raises(ValueError, match=re.escape(expected_error)):
         cli.generate_lineage(

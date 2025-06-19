@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import itertools
 import json
 import logging
 import os
@@ -13,7 +14,7 @@ from databricks.sdk.service.sql import CreateWarehouseRequestWarehouseType
 from databricks.sdk import WorkspaceClient
 
 from databricks.labs.blueprint.cli import App
-from databricks.labs.blueprint.entrypoint import get_logger
+from databricks.labs.blueprint.entrypoint import get_logger, is_in_debug
 from databricks.labs.blueprint.installation import RootJsonValue
 from databricks.labs.blueprint.tui import Prompts
 
@@ -42,6 +43,7 @@ from databricks.labs.lakebridge.transpiler.lsp.lsp_engine import LSPEngine
 from databricks.labs.lakebridge.transpiler.sqlglot.sqlglot_engine import SqlglotEngine
 from databricks.labs.lakebridge.transpiler.transpile_engine import TranspileEngine
 
+from databricks.labs.lakebridge.transpiler.transpile_status import ErrorSeverity
 
 lakebridge = App(__file__)
 logger = get_logger(__file__)
@@ -483,13 +485,29 @@ async def _transpile(ctx: ApplicationContext, config: TranspileConfig, engine: T
     logger.debug(f"User: {user}")
     _override_workspace_client_config(ctx, config.sdk_config)
     status, errors = await do_transpile(ctx.workspace_client, engine, config)
-    levels = {"ERROR": logging.ERROR, "WARNING": logging.WARNING, "INFO": logging.INFO}
-    for error in errors:
-        level = levels.get(error.severity.name, logging.DEBUG)
-        logger.log(level, f"{error.path}: {error.message}")
+
+    logger.debug(f"Transpilation completed with status: {status}")
+
+    for path, errors_by_path in itertools.groupby(errors, key=lambda x: x.path):
+        errs = list(errors_by_path)
+        errors_by_severity = {
+            severity.name: len(list(errors)) for severity, errors in itertools.groupby(errs, key=lambda x: x.severity)
+        }
+        reports = []
+        reported_severities = [ErrorSeverity.ERROR, ErrorSeverity.WARNING]
+        for severity in reported_severities:
+            if severity.name in errors_by_severity:
+                word = str.lower(severity.name) + "s" if errors_by_severity[severity.name] > 1 else ""
+                reports.append(f"{errors_by_severity[severity.name]} {word}")
+
+        msg = ", ".join(reports) + " found"
+
+        if ErrorSeverity.ERROR.name in errors_by_severity:
+            logger.error(f"{path}: {msg}")
+        elif ErrorSeverity.WARNING.name in errors_by_severity:
+            logger.warning(f"{path}: {msg}")
 
     # Table Template in labs.yml requires the status to be list of dicts Do not change this
-    logger.info(f"lakebridge Transpiler encountered {len(status)} from given {config.input_source} files.")
     return [status]
 
 
@@ -632,3 +650,5 @@ def analyze(w: WorkspaceClient, source_directory: str, report_file: str):
 
 if __name__ == "__main__":
     lakebridge()
+    if is_in_debug():
+        logger.setLevel(logging.DEBUG)
